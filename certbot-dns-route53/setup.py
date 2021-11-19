@@ -9,6 +9,7 @@ version = '1.22.0.dev0'
 install_requires = [
     'boto3',
     'setuptools>=39.0.1',
+    'dnspython'
 ]
 
 if not os.environ.get('SNAP_BUILD'):

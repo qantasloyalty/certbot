@@ -2,6 +2,7 @@
 import collections
 import logging
 import time
+import dns.resolver
 from typing import DefaultDict
 from typing import Dict
 from typing import List
@@ -70,6 +71,23 @@ class Authenticator(dns_common.DNSAuthenticator):
         except (NoCredentialsError, ClientError) as e:
             logger.debug('Encountered error during cleanup: %s', e, exc_info=True)
 
+    def _check_for_cname(self, domain):
+        """Check if the record is a CNAME to another domain. This is used sometimes
+        if the user does not have full control over the domain.
+        See sansanu comment https://community.letsencrypt.org/t/renew-using-dns-01-challenge/53498/10
+        :param domain: domain to generate SSL certificate for
+        :return: CNAME answer if exists otherwise False
+        """
+
+        try:
+            answers = dns.resolver.query(domain, 'CNAME')
+            for answer in answers:
+                logger.info("Following CNAME record to " + str(answer.target))
+                return str(answer.target)
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer) as e:
+            logger.debug(str(e))
+            return False
+
     def _find_zone_id_for_domain(self, domain):
         """Find the zone id responsible a given FQDN.
 
@@ -101,6 +119,10 @@ class Authenticator(dns_common.DNSAuthenticator):
         return zones[0][1]
 
     def _change_txt_record(self, action, validation_domain_name, validation):
+        cname_domain_name = self._check_for_cname(validation_domain_name)
+        if cname_domain_name:
+            validation_domain_name = cname_domain_name
+
         zone_id = self._find_zone_id_for_domain(validation_domain_name)
 
         rrecords = self._resource_records[validation_domain_name]
